@@ -1,0 +1,172 @@
+Grzegorz Kołakowski, gk291583
+
+Rozwiązanie zadania 3
+
+I Pliki
+    * edge_detection.c - program w C odowiedzialny za komunikację z
+        użytkownikiem i wywoływanie funkcji asemblera,
+    * functions.S - plik zawierający funkcje służące do wykrywania linii w
+        obrazach,
+    * Makefile,
+    * README,
+    * tests/ - katalog z plikami testowymi.
+
+
+II Zasada działania
+
+Program główny napisany w C przyjmuje następujące parametry:
+
+./edge_detection <1> <2> <3> <4> <5> [<6>]
+
+<1> - ścieżka do obrazka, w którym mają być rozpoznane linie,
+<2> - minimalna liczba punktów, z której ma się składać linia,
+<3> - maksymalna przerwa miedzy sąsiednimi punktami w linii, uwaga: w metryce
+      miejskiej,
+<4> - liczba kątów do rozważenia (przy kwantyzacji parametrów polarnej
+      reprezentacji prostej,
+<5> - próg, powyżej którego uznajemy, że wyliczona wartość gradientu w danym
+      punkcie, świadczy o tym, że przez dany punkt przebiega linia,
+<6> - (opcjonalny) ścieżka do pliku, w którym zostanie zapisany wynik pośredni,
+      czyli obrazek będący wynikiem aplikacji operatora Sobela.
+      
+Następnie pobiera wskazany obrazek do pamięci, inicjuje część struktur danych.
+Wykrywanie linii w obrazku jest podzielone na 3 etapy. Każdy etap jest
+obliczany przez oddzielną funkcję napisaną w asemblerze.
+
+Krok 1: Aplikacja operatora Sobela (obliczenie gradientu) dla każdego piksela
+obrazka. Krok jest realizowany przez funkcję "sobel". Jeśli gradient w danym
+punkcie jest dostatecznie duży (>= podany próg, parametr <5>), przyjmujemy, że w
+danym punkcie przebiega linia.
+
+Krok 2: W kroku drugim kwantyzujemy przestrzeń prostych w reprezentacji
+polarnej. Długość maksymalnego promienia jest równa połowie przekątnej obrazka,
+rozważamy jedynie całkowite, dodatnie wartości promienia. Kąt nachylenia prostej
+jest z zakresu [0, 180). Rozważamy jedynie kąty pochodzące z tego zakresu i
+będące zarazem wielokrotnością (180/<4>). Czyli gdy chcemy rozważyć 18 różnych
+kątów (parametr <4> = 18), to rozważamy kąty: 0, 10, 20, ..., 160, 170.
+
+Algorytm w danym kroku przechodzi wszystkie piksele w danym obrazku. Dla każdego
+piksela i dla każdego kąta, oblicza jaki jest promień prostej dla danego kąta i
+danego piksela. Wówczas taki piksel jest dorzucany do listy (jednokierunkowej,
+alokowanej dynamicznie) pikseli znajdującej się na prostej parametryzowanej
+przez parę (kąt, promień). Jeden piksel znajduje się na wielu listach.
+
+Krok 3: Dla każdej prostej parametryzowanej parą (kąt, promień) przeglądana jest
+lista leżących na niej punktów. Punkty te (jeśli istnieją) są już posortowane
+najpierw po współrzędnej x, potem po y. Dlatego chcąc znaleźć ciągłą (w miarę)
+linię, przeglądamy po kolei punkty z listy i dołączamy kolejne punkty, jeśli nie
+są zbyt odległe od ostatnio znalezionego końca linii. Jeśli dwa punkty są zbyt
+odległe, to uznajemy, że nastąpił koniec linii. Jeśli linia jest odpowiednio
+długa, to wypisujemy ją na ekran. Kontynuujemy proces z innymi punktami
+znajdującymi się na prostej. Na jednej prostej może wystąpić wiele linii.
+
+
+Testy
+
+Algortm w miarę poprawnie wykrywa krawędzie. Wadą jest to, że często krawędzie
+są "grube", po aplikacji operatora Sobela mają szerokość kilku pikseli, co
+powoduje, że wykrywanych jest wiele linii na krawędziach, ale bardzo podobnych,
+o podobnej długości, ale o minimalnie różnych punktach startowych i kącie
+nachylenia.
+
+Przykłady:
+
+1) 
+./edge_detection tests/images.pgm 35 4 18 75
+[51, 1] - [51, 193]
+[52, 1] - [52, 193]
+[103, 1] - [103, 193]
+[154, 1] - [154, 193]
+[155, 1] - [155, 193]
+[206, 1] - [206, 193]
+[207, 1] - [207, 193]
+
+Wykrywa każde przejście pomiędzy fragmentami o różnych odcieniach szarości, ale
+każde taka krawędź jest reprezentowana przez kilka linii wykrywanych przez
+transformację Hough.
+
+2)
+/edge_detection tests/indeks.pgm 35 4 18 90
+[35, 95] - [35, 192]
+[36, 1] - [36, 192]
+[62, 128] - [62, 191]
+[63, 1] - [63, 192]
+[85, 1] - [85, 192]
+[86, 1] - [86, 175]
+[107, 1] - [107, 192]
+[128, 1] - [128, 192]
+[148, 1] - [148, 192]
+[149, 1] - [149, 142]
+[170, 1] - [170, 192]
+[192, 1] - [192, 192]
+[193, 1] - [193, 192]
+[219, 1] - [219, 192]
+[220, 144] - [220, 192]
+[220, 88] - [220, 134]
+[220, 1] - [220, 78]
+
+Wykryło wszystkie krawędzie, w większości są "grubości" 2.
+Niektóre (jak ostatnia) są rozerwane na 3 kawałki.
+
+3)
+./edge_detection tests/arland.pgm  50 4 18 70 tests/sobel.pgm
+[72, 2] - [122, 2]
+[72, 4] - [122, 4]
+[119, 128] - [194, 128]
+[1, 128] - [71, 128]
+[119, 129] - [194, 129]
+[1, 129] - [71, 129]
+[70, 251] - [125, 251]
+[69, 252] - [126, 252]
+[70, 254] - [125, 254]
+[71, 255] - [125, 255]
+
+Problemem są drobne napisy na górze i dole obrazka. Program wykrył napisy jako
+linie. Przy dużej wartości progowej dla Sobela, krawędź na środku obrazka
+ma sporą dziurę.
+
+Krawędź jest rozpoznawana jako jedna dopiero gdy zmniejszymy próg i zwiększymy
+rozmiar możliwej dziury w linii:
+
+./edge_detection tests/arland.pgm  50 10 18 17 tests/sobel.pgm
+[72, 1] - [128, 1]
+[72, 2] - [127, 2]
+[72, 3] - [127, 3]
+[71, 4] - [127, 4]
+[71, 5] - [127, 5]
+[39, 127] - [167, 127]
+[1, 128] - [194, 128]
+[1, 129] - [194, 129]
+[64, 250] - [127, 250]
+[64, 251] - [127, 251]
+[64, 252] - [127, 252]
+[63, 253] - [127, 253]
+[63, 254] - [127, 254]
+[63, 255] - [127, 255]
+
+4)
+Algorytm radzi sobie też ze skośnymi liniami
+
+./edge_detection tests/40x40_4.pgm 25 4 36 75
+[38, 4] - [4, 38]
+[38, 7] - [13, 29]
+[38, 5] - [5, 38]
+[29, 13] - [7, 38]
+[30, 15] - [5, 37]
+[38, 6] - [6, 38]
+[37, 5] - [15, 30]
+[38, 7] - [7, 38]
+
+Zwiększyliśmy dwukrotnie liczbę rozważanych kątów (krok co 5 stopni).
+
+Znaleźliśmy wiele linii, które praktycznie nakładają się na siebie (efekt tego,
+że wykryta krawędź jest "gruba").
+
+Zmieniając krok na 45 stopni, widzimy, że krawędź ma grubość 4 pikseli.
+
+./edge_detection tests/40x40_4.pgm 25 4 4 75 tests/sobel.pgm
+[38, 4] - [4, 38]
+[38, 5] - [5, 38]
+[38, 6] - [6, 38]
+[38, 7] - [7, 38]
+
